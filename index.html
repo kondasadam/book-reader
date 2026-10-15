@@ -336,6 +336,20 @@
   .sgroup[open] > summary.sh::after { transform: rotate(180deg); }
   .sgroup > .sbody { display: flex; flex-direction: column; gap: .5rem; padding: .6rem .1rem .2rem; }
   .setup-screen > h2, .setup-screen > p, .setup-screen > .tiles, .setup-screen > .setup-buttons { display: none; }
+  .setup-screen { max-width: 960px; margin: 1rem auto; text-align: left; }
+  .shelfbox { margin-bottom: 4.5rem; padding: 1.1rem; border-radius: 18px; background: color-mix(in srgb, var(--bg) 84%, transparent); border: 1px solid var(--border); backdrop-filter: blur(6px); }
+  .shelf-h { font-family: var(--font-display); margin: 0 0 .8rem; font-size: 1.35rem; }
+  .shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 1.1rem 1rem; }
+  .bcard { background: none; border: 0; padding: 0; text-align: left; cursor: pointer; color: var(--fg); font: inherit; display: block; }
+  .bcover { position: relative; aspect-ratio: 2 / 3; border-radius: 10px; overflow: hidden; background: var(--bg-secondary); box-shadow: 0 6px 18px rgba(0,0,0,.28); transition: transform .15s; }
+  .bcard:hover .bcover { transform: translateY(-3px); }
+  .bcover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .bph { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .6rem; padding: .8rem; color: #fff; text-align: center; }
+  .bph-i { font-size: 2rem; } .bph-t { font-family: var(--font-display); font-weight: 700; font-size: .95rem; line-height: 1.2; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; }
+  .bbar { position: absolute; left: 0; right: 0; bottom: 0; height: 5px; background: rgba(0,0,0,.35); } .bbar > div { height: 100%; background: #c98a3c; }
+  .bt { margin-top: .45rem; font-size: .9rem; font-weight: 600; line-height: 1.25; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .bp { font-size: .78rem; color: var(--text-muted); }
+  .badd-c { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .4rem; border: 2px dashed var(--border); box-shadow: none; background: transparent; color: var(--text-muted); font-weight: 600; }
   .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: .75rem; margin: 0 0 1.5rem; }
   .tile { display: flex; flex-direction: column; align-items: center; gap: .3rem; padding: 1rem .5rem; border: 1px solid var(--border); border-radius: 14px;
     background: color-mix(in srgb, var(--bg-secondary) 85%, transparent); color: var(--fg); font: inherit; font-weight: 600; cursor: pointer; }
@@ -457,6 +471,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     <details class="sgroup" open><summary class="sh" data-tip="Könyv feltöltése, mentett könyvek megnyitása, fordító és offline csomag.">📖 Olvasás</summary><div class="sbody">
       <label class="btn btn-primary" for="bookFile" data-tip="EPUB vagy TXT könyv betöltése. A program oldalanként lefordítja, és a könyvtárba is elmenti.">📤 Könyv feltöltése</label>
     <input type="file" id="bookFile" accept=".epub,.txt,.md">
+      <button class="btn" id="homeBtn" data-tip="Vissza a főoldalra, ahol a könyveid borítóval látszanak.">🏠 Főoldal</button>
       <button class="btn" id="trBtn" data-tip="Magyarul írsz egy mondatot, és azonnal angolra fordítja. Olvasás és játék közben is előhozható.">✍️ Fordító (magyar → angol)</button>
       <button class="btn" id="libBtn" data-tip="A korábban feltöltött könyveid teljes listája, törlési lehetőséggel.">📚 Könyvtár</button>
       <button class="btn" id="offBtn" data-tip="Az egész könyvet előre lefordítja és elmenti, hogy internet nélkül is olvashasd." title="A könyv összes oldalát lefordítja és elmenti, hogy internet nélkül is olvasható legyen">⬇ Offline fordítás</button>
@@ -512,7 +527,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 <div class="setup-screen" id="setupScreen">
   <h2>Kezdj el!</h2>
   <p>Tölts fel egy könyvet, vagy illessz be egy angol szöveget.</p>
-  <div id="setupLib" style="text-align:left;margin-bottom:1.5rem"></div>
+  <div id="setupLib" class="shelfbox"></div>
   <div class="tiles">
     <button class="tile" data-go="vocabBtn"><span>📒</span>Szótár</button>
     <button class="tile" data-go="gamesBtn"><span>🎮</span>Játékok</button>
@@ -1434,6 +1449,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     if (on) { setTimeout(() => $('trIn').focus(), 60); trRun(); }
   }
   function trSetDir(d) { trDir = d; $('trTitle').textContent = d === 'hu-en' ? '✍️ Magyar → angol' : '✍️ Angol → magyar'; $('trIn').placeholder = d === 'hu-en' ? 'Írd ide magyarul…' : 'Write English here…'; trRun(); }
+  $('homeBtn').addEventListener('click', goHome);
   $('trFab').addEventListener('click', () => trOpen(true));
   $('trBtn').addEventListener('click', () => { trOpen(true); $('appHeader').classList.remove('menu-open'); });
   $('trClose').addEventListener('click', () => trOpen(false));
@@ -3095,7 +3111,78 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         h('div', { style: 'display:flex;gap:.4rem' }, h('button', { class: 'btn btn-primary', style: 'padding:.4rem .9rem', text: 'Megnyitás', onclick: () => { $('appHeader').classList.remove('menu-open'); openFromLib(m); } }), del)));
     });
   }
-  function refreshSetupLib() { renderLibList($('menuLib'), true); }
+  function refreshSetupLib() { renderLibList($('menuLib'), true); renderShelf(); }
+  // ---------- Főoldal: könyvespolc borítókkal ----------
+  async function epubCover(blob) {
+    try {
+      const zip = await JSZip.loadAsync(blob), parser = new DOMParser();
+      const cont = zip.file('META-INF/container.xml'); if (!cont) return '';
+      const rf = parser.parseFromString(await cont.async('string'), 'application/xml').querySelector('rootfile');
+      const opfPath = rf && rf.getAttribute('full-path'); if (!opfPath || !zip.file(opfPath)) return '';
+      const opf = parser.parseFromString(await zip.file(opfPath).async('string'), 'application/xml');
+      const base = opfPath.includes('/') ? opfPath.slice(0, opfPath.lastIndexOf('/') + 1) : '';
+      const items = [...opf.querySelectorAll('manifest > item')];
+      const isImg = it => /^image\//.test(it.getAttribute('media-type') || '');
+      let item = null;
+      const cm = opf.querySelector('metadata > meta[name="cover"]');
+      if (cm) item = items.find(it => it.getAttribute('id') === cm.getAttribute('content') && isImg(it));
+      if (!item) item = items.find(it => (it.getAttribute('properties') || '').includes('cover-image'));
+      if (!item) item = items.find(it => isImg(it) && /cover/i.test((it.getAttribute('id') || '') + (it.getAttribute('href') || '')));
+      if (!item) item = items.find(isImg);
+      if (!item) return '';
+      const path = resolvePath(base, item.getAttribute('href'));
+      const f = zip.file(path) || zip.file(decodeURIComponent(path)); if (!f) return '';
+      const ib = await f.async('blob');
+      const bmp = await createImageBitmap(new Blob([ib], { type: item.getAttribute('media-type') || 'image/jpeg' }));
+      const w = 300, hgt = Math.round(w * bmp.height / bmp.width), cv = document.createElement('canvas');
+      cv.width = w; cv.height = Math.min(hgt, 520); cv.getContext('2d').drawImage(bmp, 0, 0, w, hgt);
+      return cv.toDataURL('image/jpeg', 0.8);
+    } catch (e) { return ''; }
+  }
+  function placeholderCover(title) {
+    let hh = 0; for (const c of String(title)) hh = (hh * 31 + c.charCodeAt(0)) % 360;
+    return h('div', { class: 'bph', style: `background:linear-gradient(160deg,hsl(${hh},45%,38%),hsl(${(hh + 40) % 360},50%,22%))` }, h('div', { class: 'bph-i', text: '📖' }), h('div', { class: 'bph-t', text: title }));
+  }
+  let shelfRun = 0;
+  async function renderShelf() {
+    const box = $('setupLib'); if (!box) return;
+    const run = ++shelfRun;
+    let list = []; try { list = await libList(); } catch (e) {}
+    if (run !== shelfRun) return;
+    list.sort((a, c) => (c.last || 0) - (a.last || 0));
+    const shelf = h('div', { class: 'shelf' });
+    const add = h('label', { class: 'bcard badd', for: 'bookFile' }, h('div', { class: 'bcover badd-c' }, h('div', { style: 'font-size:2.2rem;line-height:1', text: '＋' }), h('div', { text: 'Új könyv' })));
+    shelf.append(add);
+    const imgs = [];
+    list.forEach(m => {
+      const cover = h('div', { class: 'bcover' });
+      const setImg = src => { cover.replaceChildren(h('img', { src, alt: '', loading: 'lazy' })); };
+      if (m.cover) setImg(m.cover); else cover.append(placeholderCover(m.title || 'Könyv'));
+      if ((m.pct || 0) > 0) cover.append(h('div', { class: 'bbar' }, h('div', { style: `width:${m.pct}%` })));
+      const card = h('button', { class: 'bcard', onclick: () => openFromLib(m) }, cover, h('div', { class: 'bt', text: m.title || 'Könyv' }), h('div', { class: 'bp', text: (m.pct || 0) + '% kész' }));
+      shelf.append(card);
+      if (m.cover === undefined && m.kind === 'epub') imgs.push([m, setImg, cover]);
+    });
+    box.replaceChildren(h('h2', { class: 'shelf-h', text: list.length ? '📚 Könyveid' : '📚 Kezdj el olvasni' }),
+      list.length ? '' : h('p', { class: 'wc-muted', text: 'Töltsd fel az első EPUB vagy TXT könyvedet, és itt fog megjelenni a borítójával.' }), shelf);
+    // hiányzó borítók pótlása (egyenként, hogy ne terhelje a telefont)
+    for (const [m, setImg, cover] of imgs) {
+      if (run !== shelfRun) return;
+      try {
+        const blob = await libGetBlob(m.key); if (!blob) continue;
+        const c = await epubCover(blob);
+        libPatch(m.key, { cover: c }).catch(() => {});
+        if (c && run === shelfRun) { setImg(c); const bar = cover.parentNode && cover.querySelector('.bbar'); }
+      } catch (e) {}
+    }
+  }
+  function goHome() {
+    try { closeCard(); } catch (e) {}
+    $('reader').style.display = 'none'; $('chapterNav').style.display = 'none'; $('setupScreen').style.display = '';
+    document.body.classList.remove('reading'); $('appHeader').classList.remove('menu-open');
+    window.scrollTo(0, 0); renderShelf();
+  }
+
   $('libBtn').addEventListener('click', () => { $('libOverlay').classList.add('show'); renderLibList($('libBody'), false); });
   $('libClose').addEventListener('click', () => $('libOverlay').classList.remove('show'));
   refreshSetupLib();
