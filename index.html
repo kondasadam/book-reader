@@ -3123,7 +3123,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 </script>
 
 <script>
-if('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(()=>{});
+if('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  const hadCtl = !!navigator.serviceWorker.controller, t0 = Date.now(); let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadCtl || reloaded) return;
+    if (Date.now() - t0 < 15000) { reloaded = true; location.reload(); }
+    else { try { document.getElementById('toast').textContent = 'Új verzió érkezett – a következő megnyitáskor él.'; document.getElementById('toast').classList.add('show'); setTimeout(() => document.getElementById('toast').classList.remove('show'), 4000); } catch (e) {} }
+  });
+  navigator.serviceWorker.register('sw.js').then(reg => { reg.update().catch(() => {}); document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); }); }).catch(() => {});
+}
 let dip=null; const ib=document.getElementById('installBtn');
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();dip=e;if(ib)ib.style.display='';});
 if(ib) ib.addEventListener('click',async()=>{if(!dip)return;dip.prompt();await dip.userChoice;dip=null;ib.style.display='none';});
