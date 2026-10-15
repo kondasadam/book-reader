@@ -301,7 +301,7 @@
   .trfab { position: fixed; right: 1.2rem; bottom: 1.2rem; z-index: 2500; width: 54px; height: 54px; border-radius: 50%; border: 1px solid rgba(255,214,150,.5); cursor: pointer;
     background: linear-gradient(135deg, #c98a3c, #8a5a1b); color: #fff; font-size: 1.5rem; box-shadow: 0 6px 20px rgba(0,0,0,.35); transition: transform .15s; }
   .trfab:hover { transform: scale(1.08); }
-  body.tr-open .trfab { display: none; }
+  body.tr-open .trfab, body.card-open .trfab { display: none; }
   .trpanel { position: fixed; right: 1.2rem; bottom: 1.2rem; z-index: 2600; width: 390px; max-width: calc(100vw - 16px); display: none; flex-direction: column; gap: .5rem; padding: .85rem;
     background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 14px 44px rgba(0,0,0,.4); }
   body.tr-open .trpanel { display: flex; animation: trin .22s ease; }
@@ -378,6 +378,7 @@
     .header { background: rgba(48,31,18,.9); padding: .5rem .6rem; border-radius: 14px; }
     .menu-btn { color: #f7ecd9; background: rgba(255,244,222,.12); border-color: rgba(255,236,200,.3); }
   }
+  @media (pointer: fine) { .touch-only { display: none !important; } }
   .menu-btn { display: none; }
   .navwrap { display: none; max-width: 1400px; margin: 0 auto 1rem; }
   body.reading .navwrap { display: block; }
@@ -490,6 +491,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     </div>
       <label class="status" style="min-width:0"><input type="checkbox" id="hoverToggle" data-tip="Szóra mutatva kis felugró fordítás jelenik meg." checked> Szósúgó</label>
       <label class="status" style="min-width:0"><input type="checkbox" id="spkToggle" data-tip="A drámák és párbeszédek beszélőit külön kiemeli." checked> Beszélők</label>
+      <label class="status touch-only" style="min-width:0" data-tip="Koppintásra lapoz: a képernyő bal harmadára koppintva vissza, a többire előre. A fordításhoz nyomd hosszan a szöveget."><input type="checkbox" id="tapToggle" checked> Koppintás = lapozás</label>
       <label class="status" style="min-width:0"><input type="checkbox" id="hlToggle" data-tip="A mentett szavak aláhúzva látszanak a szövegben." checked> Mentett szavak kiemelése</label>
       <select id="ttsRate" data-tip="A felolvasás sebessége." class="chapter-select" title="Felolvasás sebessége" aria-label="Felolvasás sebessége"><option value="1">🔊 Normál</option><option value="0.8">🔊 Lassabb</option><option value="0.6">🔊 Lassú</option></select>
       <select id="ttsVoice" data-tip="A felolvasó hang kiválasztása." class="chapter-select" title="Felolvasó hang" aria-label="Felolvasó hang" style="max-width:11rem"></select>
@@ -2751,7 +2753,23 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   document.addEventListener('mousedown', e => { if (!tip.contains(e.target)) hideTip(); });
   document.addEventListener('touchstart', e => { if (!tip.contains(e.target)) hideTip(); }, { passive: true });
   $('rows').addEventListener('scroll', hideTip);
+  // érintőképernyő: koppintás = lapozás; a fordítás a hosszú nyomással kijelölt szövegre jön
+  const TOUCH_UI = matchMedia('(pointer: coarse)').matches;
+  let tapPaging = true;
+  try { tapPaging = localStorage.getItem('br_tap') !== '0'; } catch (e) {}
+  $('tapToggle').checked = tapPaging;
+  $('tapToggle').addEventListener('change', e => { tapPaging = e.target.checked; try { localStorage.setItem('br_tap', tapPaging ? '1' : '0'); } catch (x) {} });
+  let tapBlock = false;
+  document.addEventListener('touchstart', () => { tapBlock = !!cardInfo || tip.style.display === 'block' || !window.getSelection().isCollapsed; }, { passive: true, capture: true });
   $('rows').addEventListener('click', e => {
+    if (TOUCH_UI && tapPaging) {
+      if (tapBlock || !window.getSelection().isCollapsed) { tapBlock = false; return; }
+      if (e.target.closest && e.target.closest('button, a, input, select, textarea')) return;
+      const x = e.clientX / innerWidth;
+      goPage(currentPage + (x < 0.33 ? -1 : 1));
+      try { if (!localStorage.getItem('br_taphint')) { localStorage.setItem('br_taphint', '1'); toast('Koppintás: bal oldal = vissza, jobb oldal = tovább. Fordításhoz nyomd hosszan a szót vagy mondatot.'); } } catch (x2) {}
+      return;
+    }
     const en = e.target.closest && e.target.closest('.en');
     if (!en || !window.getSelection().isCollapsed) return;
     const info = wordAt(e.clientX, e.clientY, en);
@@ -2764,7 +2782,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   let cardInfo = null, cardCtl = null, cardTok = 0;
   const cardAI = new Map(), altSet = new Set();
   function closeCard() {
-    card.classList.remove('show'); cardInfo = null; cardTok++;
+    card.classList.remove('show'); document.body.classList.remove('card-open'); cardInfo = null; cardTok++;
     if (cardCtl) { cardCtl.abort(); cardCtl = null; }
     try { CSS.highlights.delete('hoverword'); } catch (e) {}
   }
@@ -2890,14 +2908,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     }
     function renderBody() {
       body.replaceChildren();
+      tabBar.style.display = (TOUCH_UI && aiState === 'idle') || settingsOpen && TOUCH_UI ? 'none' : '';
       requestAnimationFrame(() => { if (cardInfo === info) placeCard(info.rect); });
       if (settingsOpen) { body.append(aiSettingsView(() => { settingsOpen = false; if (aiState !== 'done' && autoAI()) loadAI(); else renderBody(); })); return; }
       if (aiState === 'idle') {
         if (aiProvider !== 'claude' && !aiKey()) {
           body.append(h('p', { class: 'wc-muted', text: 'A magyarázathoz, használati példákhoz és nyelvtanhoz ingyenes AI-kulcs kell (Groq: kb. 2 perc, bankkártya nélkül).' }), gearBtn());
         } else {
-          body.append(h('p', { class: 'wc-muted', text: aiProvider === 'claude' ? 'A Claude-os magyarázat kreditet fogyaszt.' : 'AI-magyarázat erre ' + (phrase ? 'a kifejezésre.' : 'a szóra.') }));
-          const b = h('button', { class: 'btn btn-primary', text: '🧠 Magyarázat kérése' }); b.addEventListener('click', loadAI); body.append(b);
+          if (!TOUCH_UI) body.append(h('p', { class: 'wc-muted', text: aiProvider === 'claude' ? 'A Claude-os magyarázat kreditet fogyaszt.' : 'AI-magyarázat erre ' + (phrase ? 'a kifejezésre.' : 'a szóra.') }));
+          const b = h('button', { class: 'btn btn-primary', text: '🧠 Magyarázat' }); b.addEventListener('click', loadAI); body.append(b);
         }
         if (tab === 'g') { const g = guessBox(); if (g) body.append(g); }
         return;
@@ -2949,12 +2968,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     const foot = h('div', { class: 'wc-foot' }, saveB, vocB, setB);
 
     card.replaceChildren(head, tabBar, body, foot);
-    card.classList.add('show');
+    card.classList.add('show'); document.body.classList.add('card-open');
     placeCard(info.rect);
 
     if (cardAI.has(cacheKey)) { ai = cardAI.get(cacheKey); aiState = 'done'; }
     renderBody();
-    if (aiState === 'idle' && autoAI()) loadAI();
+    if (aiState === 'idle' && autoAI() && !TOUCH_UI) loadAI();
 
     // gyors fejléc-fordítás (ingyenes): szónál a szótári változatok, kifejezésnél a teljes fordítás
     (async () => {
