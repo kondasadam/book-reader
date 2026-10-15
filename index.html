@@ -860,7 +860,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       bookTitle = opts.title || file.name.replace(/\.[^.]+$/, '');
       const isEpub = /\.epub$/i.test(file.name);
       startReading(isEpub ? await parseEpub(file) : parseTextBook(await file.text()), opts.pos);
-      if (!opts.skipSave && pages.length) libSave({ key: bookKey, title: bookTitle, kind: isEpub ? 'epub' : 'txt', name: file.name, size: file.size }, file);
+      if (!opts.skipSave && pages.length) libSave({ key: bookKey, title: bookTitle, kind: isEpub ? 'epub' : 'txt', name: file.name, size: file.size }, file).then(() => isEpub && epubCover(file).then(c => libPatch(bookKey, { cover: c, coverV: 2 }))).catch(() => {});
       else if (opts.skipSave) libPatch(bookKey, { last: Date.now() }).catch(() => {});
     } catch (e) {
       showSetupError('Hiba a könyv feldolgozásakor: ' + e.message);
@@ -3128,13 +3128,36 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       if (cm) item = items.find(it => it.getAttribute('id') === cm.getAttribute('content') && isImg(it));
       if (!item) item = items.find(it => (it.getAttribute('properties') || '').includes('cover-image'));
       if (!item) item = items.find(it => isImg(it) && /cover/i.test((it.getAttribute('id') || '') + (it.getAttribute('href') || '')));
+      if (!item) {
+        // guide/spine: borító-oldal (xhtml) első képe
+        let pg = null;
+        const gr = opf.querySelector('guide > reference[type="cover"]');
+        if (gr) pg = resolvePath(base, (gr.getAttribute('href') || '').split('#')[0]);
+        if (!pg) { const ir = opf.querySelector('spine > itemref'); const it0 = ir && items.find(it => it.getAttribute('id') === ir.getAttribute('idref')); if (it0) pg = resolvePath(base, it0.getAttribute('href')); }
+        const pf = pg && (zip.file(pg) || zip.file(decodeURIComponent(pg)));
+        if (pf) {
+          const d = parser.parseFromString(await pf.async('string'), 'text/html');
+          const im = d.querySelector('img, image');
+          const src = im && (im.getAttribute('src') || im.getAttribute('href') || im.getAttribute('xlink:href'));
+          if (src) { const pb = pg.includes('/') ? pg.slice(0, pg.lastIndexOf('/') + 1) : ''; const ip = resolvePath(pb, src); item = items.find(it => resolvePath(base, it.getAttribute('href')) === ip) || { getAttribute: k => k === 'href' ? src : '', _pb: pb }; if (item._pb !== undefined) { const f2 = zip.file(ip) || zip.file(decodeURIComponent(ip)); if (f2) { item = { getAttribute: k => k === 'href' ? ip.slice(base.length) : (k === 'media-type' ? 'image/jpeg' : '') }; } } }
+        }
+      }
       if (!item) item = items.find(isImg);
       if (!item) return '';
       const path = resolvePath(base, item.getAttribute('href'));
       const f = zip.file(path) || zip.file(decodeURIComponent(path)); if (!f) return '';
       const ib = await f.async('blob');
-      const bmp = await createImageBitmap(new Blob([ib], { type: item.getAttribute('media-type') || 'image/jpeg' }));
-      const w = 300, hgt = Math.round(w * bmp.height / bmp.width), cv = document.createElement('canvas');
+      let src;
+      const mt = item.getAttribute('media-type') || 'image/jpeg';
+      const tb = new Blob([ib], { type: mt });
+      let bmp = null;
+      try { bmp = await createImageBitmap(tb); } catch (e) {}
+      if (!bmp) {
+        const u = URL.createObjectURL(tb);
+        try { bmp = await new Promise((ok, no) => { const im = new Image(); im.onload = () => ok(im); im.onerror = no; im.src = u; }); } finally { setTimeout(() => URL.revokeObjectURL(u), 5000); }
+      }
+      const bw = bmp.width || bmp.naturalWidth, bh = bmp.height || bmp.naturalHeight; if (!bw || !bh) return '';
+      const w = 300, hgt = Math.round(w * bh / bw), cv = document.createElement('canvas');
       cv.width = w; cv.height = Math.min(hgt, 520); cv.getContext('2d').drawImage(bmp, 0, 0, w, hgt);
       return cv.toDataURL('image/jpeg', 0.8);
     } catch (e) { return ''; }
@@ -3161,7 +3184,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       if ((m.pct || 0) > 0) cover.append(h('div', { class: 'bbar' }, h('div', { style: `width:${m.pct}%` })));
       const card = h('button', { class: 'bcard', onclick: () => openFromLib(m) }, cover, h('div', { class: 'bt', text: m.title || 'Könyv' }), h('div', { class: 'bp', text: (m.pct || 0) + '% kész' }));
       shelf.append(card);
-      if (m.cover === undefined && m.kind === 'epub') imgs.push([m, setImg, cover]);
+      if ((m.cover === undefined || (m.cover === '' && (m.coverV || 0) < 2)) && m.kind === 'epub') imgs.push([m, setImg, cover]);
     });
     box.replaceChildren(h('h2', { class: 'shelf-h', text: list.length ? '📚 Könyveid' : '📚 Kezdj el olvasni' }),
       list.length ? '' : h('p', { class: 'wc-muted', text: 'Töltsd fel az első EPUB vagy TXT könyvedet, és itt fog megjelenni a borítójával.' }), shelf);
@@ -3171,7 +3194,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       try {
         const blob = await libGetBlob(m.key); if (!blob) continue;
         const c = await epubCover(blob);
-        libPatch(m.key, { cover: c }).catch(() => {});
+        libPatch(m.key, { cover: c, coverV: 2 }).catch(() => {});
         if (c && run === shelfRun) { setImg(c); const bar = cover.parentNode && cover.querySelector('.bbar'); }
       } catch (e) {}
     }
