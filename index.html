@@ -109,7 +109,7 @@
   .row.k-sep { margin: 1.4em 0; }
   .row.k-sep .en, .row.k-sep .hu { text-align: center; text-indent: 0; letter-spacing: .6em; color: var(--text-muted); }
   .row.k-sep .hu { border-left-color: var(--border); }
-  #rows { touch-action: pan-y; }
+  #rows { touch-action: pan-y; -webkit-touch-callout: none; }
   .row .en::selection { background: var(--accent-light); }
   .endbar { display: none; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
     margin-top: .75rem; padding: .7rem 1rem; border-radius: 8px; background: var(--accent-light); border-left: 3px solid var(--accent); }
@@ -1827,12 +1827,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     if (cardInfo && cardInfo.word === text) return;
     const range = sel.getRangeAt(0).cloneRange();
     openCard({ word: text, rect: range.getBoundingClientRect(), range, phrase: /\s/.test(text) }, en);
+    // érintőn a kijelölést azonnal feloldjuk (a kártya kiemeli a szöveget): így nem ugrik fel az Android "Fordítás / Másolás" sávja
+    if (touchUser || TOUCH_UI) { try { sel.removeAllRanges(); } catch (e) {} }
   }
   $('rows').addEventListener('mouseup', onSelect);
+  $('rows').addEventListener('contextmenu', e => { if (touchUser) e.preventDefault(); });
   // érintőn a kijelölés fogói húzás közben többször változnak: a végén nyitjuk meg
   let touchUser = false, selTimer = null;
   document.addEventListener('touchstart', () => { touchUser = true; }, { passive: true, capture: true });
-  document.addEventListener('selectionchange', () => { if (!touchUser) return; clearTimeout(selTimer); selTimer = setTimeout(onSelect, 700); });
+  document.addEventListener('selectionchange', () => { if (!touchUser) return; clearTimeout(selTimer); selTimer = setTimeout(onSelect, 400); });
 
   // ---------- Szótár és gyakorlás ----------
   let bookKey = 'paste', bookTitle = 'Szöveg';
