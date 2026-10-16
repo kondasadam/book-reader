@@ -230,6 +230,12 @@
     .row.k-h .hu { padding-left: .9rem; }
     .reader-head .h-hu { display: none; }
   }
+  @media (max-width: 800px) {
+    .row .hu, #chapterEnd { display: none !important; }
+    .row.k-img img { max-height: var(--fitH, 60vh); }
+    #errbar { margin-bottom: .3rem; }
+  }
+  .row.cont .en { text-indent: 0; }
 
   .grammar-panel {
     position: fixed; right: 0; top: 0; width: 400px; max-width: 100vw; height: 100vh; background: var(--bg);
@@ -630,15 +636,17 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   }
 
   // ---------- Könyv betöltése ----------
-  function buildPages() {
+  const phoneFit = () => window.matchMedia('(max-width: 800px)').matches;
+  function buildPages() { return phoneFit() && $('rows').clientWidth > 0 ? buildPagesFit() : buildPagesChars(); }
+  function buildPagesChars() {
     pages = []; chapterFirstPage = [];
     chapters.forEach((ch, ci) => {
       chapterFirstPage.push(pages.length);
       let cur = [], len = 0;
       const wt = x => x.k === 'img' ? 900 : x.p.length;
-      const flush = () => { if (cur.length) pages.push({ chapter: ci, paras: cur.map(x => x.p), kinds: cur.map(x => x.k), speakers: cur.map(x => x.s), imgs: cur.map(x => x.m) }); };
+      const flush = () => { if (cur.length) pages.push({ chapter: ci, paras: cur.map(x => x.p), kinds: cur.map(x => x.k), speakers: cur.map(x => x.s), imgs: cur.map(x => x.m), conts: cur.map(() => false), p0: cur[0].i, w0: 0 }); };
       ch.paras.forEach((p, i) => {
-        const it = { p, k: ch.kinds[i], s: (ch.speakers && ch.speakers[i]) || '', m: (ch.imgs && ch.imgs[i]) || null };
+        const it = { p, i, k: ch.kinds[i], s: (ch.speakers && ch.speakers[i]) || '', m: (ch.imgs && ch.imgs[i]) || null };
         if (cur.length && len + wt(it) > PAGE_CHARS) {
           const carry = [];   // címsor ne maradjon az oldal alján
           while (cur.length > 1 && cur[cur.length - 1].k.startsWith('h')) carry.unshift(cur.pop());
@@ -650,6 +658,87 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       flush();
     });
   }
+  // Telefon: az oldal pontosan annyi szöveget tartalmaz, amennyi a képernyőn elfér (nem kell görgetni)
+  function buildPagesFit() {
+    pages = []; chapterFirstPage = [];
+    const rowsEl = $('rows'), nav = document.querySelector('.navwrap');
+    const avail = Math.max(120, nav.getBoundingClientRect().top - (rowsEl.getBoundingClientRect().top + window.scrollY) - 6);
+    document.documentElement.style.setProperty('--fitH', Math.max(100, avail - 40) + 'px');
+    const M = document.createElement('div');
+    M.className = rowsEl.className; M.style.cssText = 'position:fixed;left:0;top:0;visibility:hidden;pointer-events:none;height:auto;max-height:none;overflow:visible;width:' + rowsEl.getBoundingClientRect().width + 'px;';
+    M.style.setProperty('--fs', fontScale);
+    document.body.appendChild(M);
+    const mk = it => {
+      const row = document.createElement('div');
+      row.className = 'row k-' + (it.k.startsWith('h') ? 'h k-' + it.k : it.k) + (it.c ? ' cont' : '') + (it.s ? ' dlg' : '');
+      if (it.k === 'img') { const im = document.createElement('img'); im.src = it.m; im.alt = ''; row.appendChild(im); return row; }
+      const en = document.createElement(it.k.startsWith('h') ? 'h' + (Number(it.k[1]) + 1) : 'p'); en.className = 'en';
+      if (it.s) { const sp = document.createElement('span'); sp.className = 'spk'; sp.textContent = it.s + ': '; en.appendChild(sp); }
+      en.appendChild(document.createTextNode(it.p)); row.appendChild(en); return row;
+    };
+    const fits = () => M.scrollHeight <= avail;
+    try {
+      chapters.forEach((ch, ci) => {
+        chapterFirstPage.push(pages.length);
+        let cur = [];
+        const flush = (carryHeads) => {
+          if (!cur.length) return;
+          let carry = [];
+          if (carryHeads) while (cur.length > 1 && cur[cur.length - 1].k.startsWith('h')) carry.unshift(cur.pop());
+          pages.push({ chapter: ci, paras: cur.map(x => x.p), kinds: cur.map(x => x.k), speakers: cur.map(x => x.s), imgs: cur.map(x => x.m), conts: cur.map(x => !!x.c), p0: cur[0].i, w0: cur[0].w || 0 });
+          cur = carry; M.replaceChildren(...cur.map(mk));
+        };
+        M.replaceChildren();
+        ch.paras.forEach((p0, i) => {
+          const kind = ch.kinds[i];
+          const base = { i, k: kind, s: (ch.speakers && ch.speakers[i]) || '', m: (ch.imgs && ch.imgs[i]) || null };
+          const splittable = kind === 'p' || kind === 'q' || kind === 'li';
+          const words = splittable ? p0.split(/\s+/).filter(Boolean) : [];
+          let w = 0, guard = 0;
+          for (;;) {
+            if (++guard > 5000) break;
+            const it = Object.assign({}, base, { p: splittable ? words.slice(w).join(' ') : p0, w, c: w > 0, s: w > 0 ? '' : base.s });
+            const row = mk(it); M.appendChild(row);
+            if (fits()) { cur.push(it); break; }
+            M.removeChild(row);
+            if (!splittable) {
+              if (cur.length) { flush(true); continue; }   // új oldalon újra próbáljuk
+              M.appendChild(row); cur.push(it); break;     // egyedül sem fér (óriás kép): marad
+            }
+            // szöveg: a leghosszabb elfér-ő előtag (bináris keresés)
+            const n = words.length - w;
+            let lo = 0, hi = n - 1;
+            const test = k => { const t = Object.assign({}, it, { p: words.slice(w, w + k).join(' ') }); const r = mk(t); M.appendChild(r); const ok = fits(); M.removeChild(r); return ok; };
+            while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (test(mid)) lo = mid; else hi = mid - 1; }
+            if (cur.length && lo < Math.min(8, n - 1)) { flush(true); continue; }   // alig fér: inkább új oldalra
+            if (lo < 1) lo = 1;
+            // lehetőleg mondat végén törjünk
+            let cut = lo;
+            for (let k = lo; k > lo * 0.7 && k > 1; k--) { if (/[.!?…]["”’')\]]*$/.test(words[w + k - 1])) { cut = k; break; } }
+            const piece = Object.assign({}, it, { p: words.slice(w, w + cut).join(' ') });
+            cur.push(piece); M.appendChild(mk(piece));
+            w += cut; flush(false);
+            if (w >= words.length) break;
+          }
+        });
+        flush(false);
+      });
+    } finally { M.remove(); }
+  }
+  function pageFor(ch, para, woff) {
+    const first = chapterFirstPage[ch]; if (first == null) return 0;
+    const last = (chapterFirstPage[ch + 1] != null ? chapterFirstPage[ch + 1] : pages.length) - 1;
+    let r = first;
+    for (let k = first; k <= last; k++) { const g = pages[k]; if (g.p0 < para || (g.p0 === para && g.w0 <= woff)) r = k; else break; }
+    return r;
+  }
+  function repaginate() {
+    if (!pages.length || !chapters.length || !document.body.classList.contains('reading')) return;
+    const pg = pages[currentPage]; const ch = pg.chapter, p0 = pg.p0, w0 = pg.w0;
+    buildPages(); currentPage = pageFor(ch, p0, w0); showPage();
+  }
+  let _rpT, _lastW = window.innerWidth;
+  window.addEventListener('resize', () => { if (window.innerWidth === _lastW) return; _lastW = window.innerWidth; clearTimeout(_rpT); _rpT = setTimeout(repaginate, 250); });
 
   // ---------- Beszélők (színdarab-szerű szöveg: „Clo. How now, Lucia…") ----------
   let splitSpeakers = true;
@@ -705,11 +794,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     applySpeakers();
     _sents = null;
     if (!chapters.length) { showSetupError('Nem találtam olvasható szöveget.'); return; }
+    $('setupScreen').style.display = 'none';
+    $('chapterNav').style.display = 'flex';
+    $('reader').style.display = 'block';
+    document.body.classList.add('reading');
+    $('appHeader').classList.remove('menu-open');
     buildPages();
     currentPage = 0;
     if (pos && chapterFirstPage[pos.chapter] != null) {
-      const first = chapterFirstPage[pos.chapter], last = (chapterFirstPage[pos.chapter + 1] != null ? chapterFirstPage[pos.chapter + 1] : pages.length) - 1;
-      currentPage = Math.min(last, first + Math.max(0, pos.pageInChapter || 0));
+      if (pos.para != null) currentPage = pageFor(pos.chapter, pos.para, pos.woff || 0);
+      else { const first = chapterFirstPage[pos.chapter], last = (chapterFirstPage[pos.chapter + 1] != null ? chapterFirstPage[pos.chapter + 1] : pages.length) - 1; currentPage = Math.min(last, first + Math.max(0, pos.pageInChapter || 0)); }
     }
     const sel = $('chapterSelect');
     sel.innerHTML = '';
@@ -719,11 +813,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       o.textContent = `${i + 1}. ${ch.title}`;
       sel.appendChild(o);
     });
-    $('setupScreen').style.display = 'none';
-    $('chapterNav').style.display = 'flex';
-    $('reader').style.display = 'block';
-    document.body.classList.add('reading');
-    $('appHeader').classList.remove('menu-open');
     showPage();
   }
 
@@ -1050,6 +1139,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const tag = kind.startsWith('h') ? 'h' + (Number(kind[1]) + 1) : 'p';
       const sp = (pg.speakers && pg.speakers[i]) || '';
       if (sp) row.classList.add('dlg');
+      if (pg.conts && pg.conts[i]) row.classList.add('cont');
       const en = document.createElement(tag); en.className = 'en'; en.lang = 'en';
       const hu = document.createElement(tag); hu.className = 'hu pending'; hu.lang = 'hu';
       if (sp) { en.append(h('span', { class: 'spk', text: sp + ':' }), ' '); hu.append(h('span', { class: 'spk', text: sp + ':' }), ' '); }
@@ -1077,6 +1167,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     const fill = () => pg.paras.forEach((p, i) => {
       if (pg.kinds[i] !== 'sep' && pg.kinds[i] !== 'img' && transCache.has(p)) { huEls[i].querySelector('.b').textContent = transCache.get(p); huEls[i].className = 'hu'; }
     });
+    if (phoneFit()) { $('tstatus').textContent = ''; return; }   // telefonon csak angol szöveg; a fordítás kijelöléskor jön
     fill();
     if (mode !== 'claude' && !todo.every(p => transCache.has(p))) { await tcLoad(todo); if (token !== renderToken) return; fill(); }
     $('tstatus').textContent = '';
@@ -1497,8 +1588,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     if (v) { fontScale = Math.min(1.8, Math.max(.7, Number(v.fontScale) || 1)); if (['auto','light','sepia','dark'].includes(v.t)) $('themeSelect').value = v.t; }
   } catch (e) {}
   $('themeSelect').addEventListener('change', applyView);
-  $('fontUp').addEventListener('click', () => { fontScale = Math.min(1.8, +(fontScale + .1).toFixed(2)); applyView(); });
-  $('fontDown').addEventListener('click', () => { fontScale = Math.max(.7, +(fontScale - .1).toFixed(2)); applyView(); });
+  $('fontUp').addEventListener('click', () => { fontScale = Math.min(1.8, +(fontScale + .1).toFixed(2)); applyView(); if (phoneFit()) { clearTimeout(_rpT); _rpT = setTimeout(repaginate, 250); } });
+  $('fontDown').addEventListener('click', () => { fontScale = Math.max(.7, +(fontScale - .1).toFixed(2)); applyView(); if (phoneFit()) { clearTimeout(_rpT); _rpT = setTimeout(repaginate, 250); } });
   applyView();
 
   $('providerSelect').addEventListener('change', e => setMode(e.target.value));
@@ -3073,7 +3164,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     clearTimeout(progTimer);
     progTimer = setTimeout(() => {
       const pg = pages[currentPage]; if (!pg) return;
-      libPatch(bookKey, { chapter: pg.chapter, pageInChapter: currentPage - chapterFirstPage[pg.chapter], pct: Math.round(100 * (currentPage + 1) / pages.length), last: Date.now() }).catch(() => {});
+      libPatch(bookKey, { chapter: pg.chapter, pageInChapter: currentPage - chapterFirstPage[pg.chapter], para: pg.p0, woff: pg.w0, pct: Math.round(100 * (currentPage + 1) / pages.length), last: Date.now() }).catch(() => {});
     }, 700);
   }
 
@@ -3083,7 +3174,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       if (!blob) { toast('A könyv fájlja nem található.'); return; }
       $('libOverlay').classList.remove('show');
       await handleFile(new File([blob], meta.name || 'konyv.epub', { type: blob.type }),
-        { key: meta.key, title: meta.title, skipSave: true, pos: { chapter: meta.chapter || 0, pageInChapter: meta.pageInChapter || 0 } });
+        { key: meta.key, title: meta.title, skipSave: true, pos: { chapter: meta.chapter || 0, pageInChapter: meta.pageInChapter || 0, para: meta.para, woff: meta.woff } });
     } catch (e) { toast('Nem sikerült megnyitni: ' + ((e && e.message) || 'hiba')); }
   }
 
