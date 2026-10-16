@@ -1835,7 +1835,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   // érintőn a kijelölés fogói húzás közben többször változnak: a végén nyitjuk meg
   let touchUser = false, selTimer = null;
   document.addEventListener('touchstart', () => { touchUser = true; }, { passive: true, capture: true });
-  document.addEventListener('selectionchange', () => { if (!touchUser) return; clearTimeout(selTimer); selTimer = setTimeout(onSelect, 400); });
+  document.addEventListener('selectionchange', () => { if (!touchUser) return; clearTimeout(selTimer); selTimer = setTimeout(onSelect, 1300); });
 
   // ---------- Szótár és gyakorlás ----------
   let bookKey = 'paste', bookTitle = 'Szöveg';
