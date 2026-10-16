@@ -109,6 +109,7 @@
   .row.k-sep { margin: 1.4em 0; }
   .row.k-sep .en, .row.k-sep .hu { text-align: center; text-indent: 0; letter-spacing: .6em; color: var(--text-muted); }
   .row.k-sep .hu { border-left-color: var(--border); }
+  #rows { touch-action: pan-y; }
   .row .en::selection { background: var(--accent-light); }
   .endbar { display: none; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
     margin-top: .75rem; padding: .7rem 1rem; border-radius: 8px; background: var(--accent-light); border-left: 3px solid var(--accent); }
@@ -195,6 +196,7 @@
   .wcard .wc-ex .hu { color: var(--text-muted); font-size: .9rem; }
   .wcard .wc-ex button { background: none; border: 0; cursor: pointer; font-size: .95rem; padding: 0 .3rem; }
   .wcard .wc-muted { color: var(--text-muted); }
+  .wcard .wc-dif { margin: .55rem 0; padding: .45rem .7rem; border-left: 3px solid var(--accent); background: var(--accent-light); border-radius: 0 8px 8px 0; font-size: .93rem; line-height: 1.45; }
   .wcard .wc-lab { display: inline-block; font-size: .75rem; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: var(--accent); margin: .1rem 0 .15rem; }
   .wcard .wc-guess { margin-top: .8rem; padding-top: .6rem; border-top: 1px dashed var(--border); font-size: .9rem; }
   .wcard .wc-guess p { margin: 0 0 .4rem; }
@@ -512,7 +514,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     </div>
       <label class="status" style="min-width:0"><input type="checkbox" id="hoverToggle" data-tip="Szóra mutatva kis felugró fordítás jelenik meg." checked> Szósúgó</label>
       <label class="status" style="min-width:0"><input type="checkbox" id="spkToggle" data-tip="A drámák és párbeszédek beszélőit külön kiemeli." checked> Beszélők</label>
-      <label class="status touch-only" style="min-width:0" data-tip="Koppintásra lapoz: a képernyő bal harmadára koppintva vissza, a többire előre. A fordításhoz nyomd hosszan a szöveget."><input type="checkbox" id="tapToggle" checked> Koppintás = lapozás</label>
+      <label class="status touch-only" style="min-width:0" data-tip="Húzásra lapoz: balra húzva előre, jobbra húzva vissza. Egy szóra koppintva megjelenik a fordítása; hosszan nyomva kijelölhetsz egy részt."><input type="checkbox" id="tapToggle" checked> Húzás = lapozás</label>
       <label class="status" style="min-width:0"><input type="checkbox" id="hlToggle" data-tip="A mentett szavak aláhúzva látszanak a szövegben." checked> Mentett szavak kiemelése</label>
       <select id="ttsRate" data-tip="A felolvasás sebessége." class="chapter-select" title="Felolvasás sebessége" aria-label="Felolvasás sebessége"><option value="1">🔊 Normál</option><option value="0.8">🔊 Lassabb</option><option value="0.6">🔊 Lassú</option></select>
       <select id="ttsVoice" data-tip="A felolvasó hang kiválasztása." class="chapter-select" title="Felolvasó hang" aria-label="Felolvasó hang" style="max-width:11rem"></select>
@@ -2862,10 +2864,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   $('rows').addEventListener('scroll', hideTip);
   // érintőképernyő: koppintás = lapozás; a fordítás a hosszú nyomással kijelölt szövegre jön
   const TOUCH_UI = matchMedia('(pointer: coarse)').matches;
-  let tapPaging = true;
-  try { tapPaging = localStorage.getItem('br_tap') !== '0'; } catch (e) {}
-  $('tapToggle').checked = tapPaging;
-  $('tapToggle').addEventListener('change', e => { tapPaging = e.target.checked; try { localStorage.setItem('br_tap', tapPaging ? '1' : '0'); } catch (x) {} });
+  const tapPaging = false;   // a koppintás szót nyit; a lapozás húzással megy
+  let swipePaging = true;
+  try { swipePaging = localStorage.getItem('br_swipe') !== '0'; } catch (e) {}
+  $('tapToggle').checked = swipePaging;
+  $('tapToggle').addEventListener('change', e => { swipePaging = e.target.checked; try { localStorage.setItem('br_swipe', swipePaging ? '1' : '0'); } catch (x) {} });
   let tapBlock = false;
   document.addEventListener('touchstart', () => { tapBlock = !!cardInfo || tip.style.display === 'block' || !window.getSelection().isCollapsed; }, { passive: true, capture: true });
   $('rows').addEventListener('click', e => {
@@ -2902,30 +2905,31 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     (Array.isArray(d[1]) ? d[1] : []).forEach(e => (Array.isArray(e[1]) ? e[1] : []).forEach(t => { if (typeof t === 'string' && !alts.includes(t)) alts.push(t); }));
     return { main, alts: alts.slice(0, 4) };
   }
+  const lvlNote = () => 'The learner\'s English level is about ' + (gramLevel || 'B1') + ' (CEFR). Never explain things that are easy for that level.\n';
   function wordCardPrompt(word, context) {
-    return 'You are an English teacher for a Hungarian learner. The learner clicked ONE word while reading a book.\n' +
-      'Word: ' + JSON.stringify(word) + '\nSentence/paragraph: ' + JSON.stringify(context.slice(0, 600)) + '\n\n' +
+    return 'You are an English teacher for a Hungarian learner. The learner tapped ONE word while reading a book.\n' + lvlNote() +
+      'Word: ' + JSON.stringify(word) + '\nSentence/paragraph: ' + JSON.stringify(context.slice(0, 700)) + '\n\n' +
+      'FIRST check whether this word is only one piece of a bigger unit in the sentence: a phrasal verb (give up, look after), idiom, fixed expression, collocation, or a word whose meaning changes because of a neighbouring word. If yes, the answer must be about the WHOLE unit, not the word alone.\n' +
       'Reply with ONLY one JSON object; every explanation in Hungarian:\n' +
-      '{"translation": "Hungarian translation of the word as used in THIS sentence",\n' +
+      '{"translation": "Hungarian translation of the word (or of the whole unit, if it is part of one) as used in THIS sentence",\n' +
+      ' "expression": "the full phrasal verb/idiom/expression it belongs to, exactly as written in the sentence, or empty string if the word stands alone",\n' +
       ' "base": "dictionary form of the word",\n' +
       ' "pos": "part of speech in Hungarian (pl. főnév, ige, melléknév)",\n' +
-      ' "meaning": "what the word means in THIS sentence, 2-3 short sentences",\n' +
-      ' "examples": [ {"en": "simple natural example sentence", "hu": "Hungarian translation"} ],\n' +
-      ' "grammar": "grammar notes, 2-4 short sentences: which form it is here (tense, plural, comparative…), irregular forms, typical prepositions/collocations"}\n' +
-      'Give exactly 3 examples, different from the book sentence.';
+      ' "meaning": "what it means in THIS sentence, 1-3 short plain sentences; mention other common meanings only if the learner could confuse them",\n' +
+      ' "form_hu": "only if the word is NOT in its basic form here: one short sentence about the form (e.g. past participle after \'had\', plural, comparative) - otherwise empty string",\n' +
+      ' "examples": [ {"en": "simple natural example sentence", "hu": "Hungarian translation"} ]}\n' +
+      'Give exactly 3 examples that use the word (or unit) in the SAME sense as in the book, different from the book sentence.';
   }
   function phraseCardPrompt(text, context) {
-    return 'You are an English teacher for a Hungarian learner. While reading a book the learner selected an expression, grammar structure or whole sentence they do not understand.\n' +
-      'Selected text: ' + JSON.stringify(text) + '\nSentence/paragraph it appears in: ' + JSON.stringify(context.slice(0, 700)) + '\n\n' +
-      'Reply with ONLY one JSON object; every explanation in Hungarian:\n' +
-      '{"translation": "natural Hungarian translation of the selected text in THIS context",\n' +
-      ' "type": "phrase" | "idiom" | "phrasal verb" | "structure" | "sentence",\n' +
-      ' "name": "grammatical name of the tense/structure/expression (e.g. Past Perfect Continuous, third conditional, passive voice, phrasal verb \'give up\', idiom)",\n' +
-      ' "explanation": "what it means / how it is formed, 2-4 short sentences",\n' +
-      ' "why": "why THIS form is used here and when to use it instead of the alternatives, 2-3 short sentences",\n' +
-      ' "usages": [ {"label": "short Hungarian label of this use/sense", "en": "natural example sentence", "hu": "Hungarian translation"} ],\n' +
-      ' "grammar": "the pattern/formation rule (e.g. had + past participle), common mistakes, similar structures to compare, 2-4 short sentences"}\n' +
-      'Give 4 usages that show DIFFERENT ways of using the expression or structure (different senses, contexts or forms). Keep examples simple and different from the book sentence. If the selection is a whole sentence, explain its structure/tenses and break down the tricky parts in "explanation", and use "usages" for 4 similar sentences built the same way.';
+    return 'You are an English teacher for a Hungarian learner. While reading a book the learner selected a part of the text they do not fully understand.\n' + lvlNote() +
+      'Selected text: ' + JSON.stringify(text) + '\nSentence/paragraph it appears in: ' + JSON.stringify(context.slice(0, 900)) + '\n\n' +
+      'YOUR MAIN JOB: work out WHAT in the selected text a learner of that level would not understand, and explain exactly that - nothing else. Ignore everything that is simple. Pick the 1-4 most important difficulties, e.g.: idiom, phrasal verb, old/rare/literary word, a tense/aspect/voice/mood form that changes the meaning, inversion, ellipsis (left-out words), cleft or reduced clauses, long noun phrases, false friends, a word with an unusual meaning here. Most important first.\n' +
+      'Reply with ONLY one JSON object; every explanation in Hungarian, in plain everyday words (describe forms with simple formulas like "had + 3. alak", avoid grammar terminology):\n' +
+      '{"translation": "natural Hungarian translation of the whole selected text in THIS context",\n' +
+      ' "difficulties": [ {"part": "the exact words from the selected text this is about", "kind": "short Hungarian label, e.g. kifejezés, frázisige, régies szó, szerkezet, igeidő, kihagyott szavak", "explain_hu": "1-3 short sentences: what it means / how it is built / why it is used here", "literal_hu": "word-for-word Hungarian rendering - ONLY for idioms or odd constructions where it helps, else empty string"} ],\n' +
+      ' "note_hu": "one short tip or summary the learner should remember, or empty string",\n' +
+      ' "usages": [ {"label": "short Hungarian label", "en": "natural example sentence", "hu": "Hungarian translation"} ]}\n' +
+      'If the selection is simple, still give 1 difficulty (the most useful thing to know) and say in note_hu that the rest is simple. Give 3 "usages": examples with the SAME main difficulty used in different contexts, simple, different from the book sentence.';
   }
   function placeCard(rect) {
     if (window.matchMedia('(max-width: 800px)').matches) { card.style.left = card.style.top = ''; return; }
@@ -2985,7 +2989,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     if (TTS_OK) { const sp = h('button', { class: 'wc-ic', text: '🔊', title: 'Felolvasás' }); sp.addEventListener('click', () => speak(word)); head.append(sp); }
     const cl = h('button', { class: 'wc-ic', text: '✕', title: 'Bezárás' }); cl.addEventListener('click', closeCard); head.append(cl);
 
-    const TABS = phrase ? [['m', 'Magyarázat'], ['e', 'Használat'], ['g', 'Nyelvtan']] : [['m', 'Megmagyarázza'], ['e', 'Példák'], ['g', 'Nyelvtan']];
+    const TABS = phrase ? [['m', 'Magyarázat'], ['e', 'Használat']] : [['m', 'Megmagyarázza'], ['e', 'Példák']];
     let tab = 'm', ai = null, aiState = 'idle', aiErr = '', settingsOpen = false;
     const tabBar = h('div', { class: 'wc-tabs' });
     const body = h('div', { class: 'wc-body' });
@@ -3025,7 +3029,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           if (!TOUCH_UI) body.append(h('p', { class: 'wc-muted', text: aiProvider === 'claude' ? 'A Claude-os magyarázat kreditet fogyaszt.' : 'AI-magyarázat erre ' + (phrase ? 'a kifejezésre.' : 'a szóra.') }));
           const b = h('button', { class: 'btn btn-primary', text: '🧠 Magyarázat' }); b.addEventListener('click', loadAI); body.append(b);
         }
-        if (tab === 'g') { const g = guessBox(); if (g) body.append(g); }
+        if (phrase) { const g = guessBox(); if (g) body.append(g); }
         return;
       }
       if (aiState === 'loading') { body.append(h('p', { class: 'wc-muted', text: 'Magyarázat készül…' })); return; }
@@ -3033,20 +3037,25 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         body.append(h('p', { class: 'wc-muted', text: aiErr }));
         const b = h('button', { class: 'btn', text: 'Újra' }); b.addEventListener('click', loadAI);
         body.append(h('div', { style: 'display:flex;gap:.5rem;flex-wrap:wrap' }, b, gearBtn()));
-        if (tab === 'g') { const g = guessBox(); if (g) body.append(g); }
+        if (phrase) { const g = guessBox(); if (g) body.append(g); }
         return;
       }
       const d = ai || {};
       if (tab === 'm') {
         if (phrase) {
           if (d.translation) body.append(h('p', {}, h('b', { text: d.translation })));
-          if (d.name) body.append(h('p', {}, h('span', { class: 'wc-muted', text: 'Szerkezet: ' }), h('b', { text: d.name })));
-          if (d.explanation) body.append(h('p', { text: d.explanation }));
-          if (d.why) body.append(h('p', {}, h('b', { text: 'Miért ezt használjuk? ' }), d.why));
+          const dif = Array.isArray(d.difficulties) ? d.difficulties : [];
+          dif.forEach(x => { if (!x) return;
+            body.append(h('div', { class: 'wc-dif' }, h('div', {}, h('b', { text: x.part || '' }), x.kind ? h('span', { class: 'wc-muted', text: '  · ' + x.kind }) : ''),
+              x.explain_hu ? h('div', { text: x.explain_hu }) : '', x.literal_hu ? h('div', { class: 'wc-muted', text: 'Szó szerint: ' + x.literal_hu }) : '')); });
+          if (!dif.length) { if (d.name) body.append(h('p', {}, h('span', { class: 'wc-muted', text: 'Szerkezet: ' }), h('b', { text: d.name }))); if (d.explanation) body.append(h('p', { text: d.explanation })); }
+          if (d.note_hu) body.append(h('p', { class: 'wc-muted', text: '💡 ' + d.note_hu }));
         } else {
           if (d.pos || d.base) body.append(h('p', { class: 'wc-muted', text: [d.pos, d.base && d.base.toLowerCase() !== word.toLowerCase() ? 'alapalak: ' + d.base : ''].filter(Boolean).join(' · ') }));
+          if (d.expression && d.expression.toLowerCase() !== word.toLowerCase()) body.append(h('p', {}, h('span', { class: 'wc-muted', text: 'Kifejezés: ' }), h('b', { text: d.expression })));
           if (d.translation) body.append(h('p', {}, 'Ebben a mondatban: ', h('b', { text: d.translation })));
           body.append(h('p', { text: d.meaning || '–' }));
+          if (d.form_hu) body.append(h('p', { class: 'wc-muted', text: d.form_hu }));
         }
       } else if (tab === 'e') {
         const ex = Array.isArray(phrase ? d.usages : d.examples) ? (phrase ? d.usages : d.examples) : [];
@@ -3057,9 +3066,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           if (TTS_OK) { const sb = h('button', { text: '🔊', title: 'Felolvasás' }); sb.addEventListener('click', () => speak(x && x.en)); en1.append(sb); }
           body.append(h('div', { class: 'wc-ex' }, en1, h('div', { class: 'hu', text: (x && x.hu) || '' })));
         });
-      } else {
-        body.append(h('p', { text: d.grammar || '–' }));
-        const g = phrase ? guessBox() : null; if (g) body.append(g);
       }
     }
 
@@ -3314,12 +3320,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     const r = $('rows');
     r.addEventListener('touchstart', e => { multi = e.touches.length > 1; const t = e.touches[0]; sx = t.clientX; sy = t.clientY; st = Date.now(); }, { passive: true });
     r.addEventListener('touchend', e => {
-      if (multi || !pages.length) return;
+      if (multi || !pages.length || !swipePaging) return;
       const t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy;
-      if (Date.now() - st > 700 || Math.abs(dx) < 70 || Math.abs(dx) < 2 * Math.abs(dy)) return;
+      if (Date.now() - st > 900 || Math.abs(dx) < 45 || Math.abs(dx) < 1.4 * Math.abs(dy)) return;
       if (!window.getSelection().isCollapsed || tip.style.display === 'block') return;
+      if (e.cancelable) e.preventDefault();
       goPage(currentPage + (dx < 0 ? 1 : -1));
-    }, { passive: true });
+    }, { passive: false });
   })();
 </script>
 
